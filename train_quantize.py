@@ -159,6 +159,18 @@ def parse_args(argv):
         default=1e-3,
         help="Learning rate (default: %(default)s)",
     )
+    parser.add_argument(
+        "--num_frames",
+        type=int,
+        default=50,
+        help="Number of frames (default: %(default)s)",
+    )
+    parser.add_argument(
+        "--start_frame",
+        type=int,
+        default=0,
+        help="Start frame (default: %(default)s)",
+    )
     parser.add_argument("--pretrained", type=str, help="Path to a checkpoint")
     args = parser.parse_args(argv)
     return args
