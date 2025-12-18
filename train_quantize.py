@@ -184,6 +184,8 @@ def main(argv):
         image_length, start = 24, 0
     elif args.data_name == "DIV2K_valid_LRX2":
         image_length, start = 100, 800
+    else:
+        image_length, start = args.num_frames, args.start_frame
 
     for i in range(start, start+image_length):
         if args.data_name == "kodak":
@@ -192,6 +194,9 @@ def main(argv):
         elif args.data_name == "DIV2K_valid_LRX2":
             image_path = Path(args.dataset) /  f'{i+1:04}x2.png'
             model_path = Path(args.model_path) / f'{i+1:04}x2' / 'gaussian_model.pth.tar'
+        else:
+            image_path = Path(args.dataset) / f'frame_{i+1:04}.png'
+            model_path = Path(args.model_path) / f'frame_{i+1:04}' / 'gaussian_model.pth.tar'
         
         trainer = SimpleTrainer2d(image_path=image_path, num_points=args.num_points, 
             iterations=args.iterations, model_name=args.model_name, args=args, model_path=model_path)
