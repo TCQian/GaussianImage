@@ -14,6 +14,31 @@ from tqdm import tqdm
 import random
 import torchvision.transforms as transforms
 
+class EarlyStopping:
+    def __init__(self, patience=100, min_delta=1e-10):
+        self.patience = patience  # Number of tolerated iterations with no improvement
+        self.min_delta = min_delta  # Minimum improvement threshold
+        self.best_loss = None  # Stores the best loss value
+        self.counter = 0  # Tracks the number of iterations without improvement
+
+    def __call__(self, current_loss):
+        if self.best_loss is None:
+            self.best_loss = current_loss
+            return False  # Do not stop training
+
+        # If the improvement over the previous best loss is less than min_delta, consider it no improvement
+        if self.best_loss - current_loss > self.min_delta:
+            self.best_loss = current_loss
+            self.counter = 0  # Reset counter
+        else:
+            self.counter += 1
+
+        # If the counter exceeds patience, stop training
+        if self.counter >= self.patience:
+            return True  # Stop training
+
+        return False  # Continue training
+
 class SimpleTrainer2d:
     """Trains random 2d gaussians to fit an image."""
     def __init__(
@@ -25,6 +50,9 @@ class SimpleTrainer2d:
         model_path = None,
         args = None,
     ):
+        self.patience = 100
+        self.min_delta = 1e-9
+
         self.device = torch.device("cuda:0")
         self.gt_image = image_path_to_tensor(image_path).to(self.device)
 
@@ -65,11 +93,17 @@ class SimpleTrainer2d:
     def train(self):     
         psnr_list, iter_list = [], []
         progress_bar = tqdm(range(1, self.iterations+1), desc="Training progress")
+        early_stopping = EarlyStopping(patience=self.patience, min_delta=self.min_delta)
         best_psnr = 0
         self.gaussian_model.train()
         start_time = time.time()
         for iter in range(1, self.iterations+1):
             loss, psnr = self.gaussian_model.train_iter(self.gt_image)
+            
+            if early_stopping(loss):
+                print(f"Early stopping at iteration {iter}")
+                break
+
             psnr_list.append(psnr)
             iter_list.append(iter)
             with torch.no_grad():

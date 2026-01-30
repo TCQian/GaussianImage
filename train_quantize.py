@@ -14,7 +14,7 @@ from tqdm import tqdm
 import random
 import copy
 import torchvision.transforms as transforms
-
+from train import EarlyStopping
 class SimpleTrainer2d:
     """Trains random 2d gaussians to fit an image."""
     def __init__(
@@ -26,6 +26,10 @@ class SimpleTrainer2d:
         model_path = None,
         args = None,
     ):
+
+        self.patience = 100
+        self.min_delta = 1e-9
+
         self.device = torch.device("cuda:0")
         self.gt_image = image_path_to_tensor(image_path).to(self.device) #gt_image.to(device=self.device)
         self.num_points = num_points
@@ -61,12 +65,18 @@ class SimpleTrainer2d:
     def train(self):     
         psnr_list, iter_list = [], []
         progress_bar = tqdm(range(1, self.iterations+1), desc="Training progress")
+        early_stopping = EarlyStopping(patience=self.patience, min_delta=self.min_delta)
         best_psnr = 0
         self.gaussian_model.train()
         start_time = time.time()
         best_psnr = 0
         for iter in range(1, self.iterations+1):
             loss, psnr = self.gaussian_model.train_iter_quantize(self.gt_image)
+            
+            if early_stopping(loss):
+                print(f"Early stopping at iteration {iter}")
+                break
+
             psnr_list.append(psnr)
             iter_list.append(iter)
             if best_psnr < psnr:

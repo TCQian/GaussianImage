@@ -15,9 +15,8 @@ cd ..
 # Define variables for easy updating.
 DATA_NAME="Beauty"
 MODEL_NAME="GaussianImage_Cholesky"
-NUM_POINTS=10000
-TRAIN_ITERATIONS=20000
-QUANT_ITERATIONS=10000
+TRAIN_ITERATIONS=50000
+QUANT_ITERATIONS=50000
 
 # Default values for parameters to be overridden.
 NUM_POINTS=750

@@ -66,13 +66,13 @@ class SimpleTrainer2d:
     def test(self,):
         self.gaussian_model.eval()
         with torch.no_grad():
-            encoding_dict = self.gaussian_model.compress_wo_ec()
-            out = self.gaussian_model.decompress_wo_ec(encoding_dict)
+            encoding_dict = self.gaussian_model.compress()
+            out = self.gaussian_model.decompress(encoding_dict)
             start_time = time.time()
             for i in range(100):
-                _ = self.gaussian_model.decompress_wo_ec(encoding_dict)
+                _ = self.gaussian_model.decompress(encoding_dict)
             end_time = (time.time() - start_time)/100
-        data_dict = self.gaussian_model.analysis_wo_ec(encoding_dict)
+        data_dict = self.gaussian_model.analysis(encoding_dict)
     
         out_img = out["render"].float()
         mse_loss = F.mse_loss(out_img, self.gt_image)
