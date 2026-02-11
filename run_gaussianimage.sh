@@ -56,44 +56,7 @@ echo "Starting GaussianImage_${DATA_NAME}_${NUM_FRAMES}_${NUM_POINTS}..."
 # Define dataset and checkpoint paths using the variables.
 YUV_PATH="/home/e/e0407638/github/GaussianVideo/YUV/${DATA_NAME}_1920x1080_120fps_420_8bit_YUV.yuv"
 DATASET_PATH="/home/e/e0407638/github/GaussianVideo/dataset/${DATA_NAME}/"
-CHECKPOINT_PATH="/home/e/e0407638/github/GaussianImage/checkpoints/${DATA_NAME}/${MODEL_NAME}_${TRAIN_ITERATIONS}_${NUM_POINTS}/"
-CHECKPOINT_QUANT_PATH="/home/e/e0407638/github/GaussianImage/checkpoints_quant/${DATA_NAME}/${MODEL_NAME}_${QUANT_ITERATIONS}_${NUM_POINTS}/"
+CHECKPOINT_PATH="/home/e/e0407638/github/GaussianVideo/checkpoints/${DATA_NAME}/${MODEL_NAME}_${TRAIN_ITERATIONS}_${NUM_POINTS}/"
+CHECKPOINT_QUANT_PATH="/home/e/e0407638/github/GaussianVideo/checkpoints_quant/${DATA_NAME}/${MODEL_NAME}_${QUANT_ITERATIONS}_${NUM_POINTS}/"
 
-python utils.py "${YUV_PATH}" --width 1920 --height 1080 --start_frame ${START_FRAME}
-
-# Run the training script with the required arguments.
-python train.py \
-    --dataset "${DATASET_PATH}" \
-    --data_name "${DATA_NAME}" \
-    --iterations "${TRAIN_ITERATIONS}" \
-    --model_name "${MODEL_NAME}" \
-    --num_points "${NUM_POINTS}" \
-    --start_frame "${START_FRAME}" \
-    --num_frames "${NUM_FRAMES}" \
-    --save_imgs
-
-# Run the quantization training script.
-python train_quantize.py \
-    --dataset "${DATASET_PATH}" \
-    --data_name "${DATA_NAME}" \
-    --iterations "${QUANT_ITERATIONS}" \
-    --model_name "${MODEL_NAME}" \
-    --num_points "${NUM_POINTS}" \
-    --model_path "${CHECKPOINT_PATH}" \
-    --start_frame "${START_FRAME}" \
-    --num_frames "${NUM_FRAMES}" \
-    --save_imgs
-
-# Run the quantization testing script.
-python test_quantize.py \
-    --dataset "${DATASET_PATH}" \
-    --data_name "${DATA_NAME}" \
-    --iterations "${QUANT_ITERATIONS}" \
-    --model_name "${MODEL_NAME}" \
-    --num_points "${NUM_POINTS}" \
-    --model_path "${CHECKPOINT_QUANT_PATH}" \
-    --start_frame "${START_FRAME}" \
-    --num_frames "${NUM_FRAMES}" \
-    --save_imgs
-
-echo "Done"
+python test_image.py --checkpoint ${CHECKPOINT_PATH}/gaussian_model.pth.tar --H 1080 --W 1920
