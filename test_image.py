@@ -22,7 +22,7 @@ CHOLESKY_BOUND_2D = torch.tensor([0.5, 0, 0.5], dtype=torch.float32)
 
 
 def load_checkpoint(path: str, device="cpu"):
-    """Load GaussianImage checkpoint (_xyz, _cholesky with 3 elements)."""
+    """Load GaussianImage checkpoint (_xyz, _cholesky with 3 elements, optional _features_dc)."""
     ckpt = torch.load(path, map_location=device)
     if "_cholesky" not in ckpt or ckpt["_cholesky"].shape[1] != 3:
         raise KeyError("Expected GaussianImage (Cholesky) checkpoint with _cholesky (N, 3)")
@@ -30,7 +30,8 @@ def load_checkpoint(path: str, device="cpu"):
     xyz_raw = ckpt["_xyz"]
     bound = CHOLESKY_BOUND_2D.to(cholesky_raw.device).view(1, 3)
     cholesky_elements = cholesky_raw + bound  # (N, 3)
-    return cholesky_elements, xyz_raw
+    feature_dc = ckpt.get("_features_dc")  # (N, 3) or None
+    return cholesky_elements, xyz_raw, feature_dc
 
 
 def cholesky_2d_to_covariance(L_flat: torch.Tensor) -> torch.Tensor:
@@ -86,14 +87,16 @@ def plot_histograms_2d(
     out_dir: Path,
     prefix: str = "",
     conic_elements: Optional[np.ndarray] = None,
+    feature_dc: Optional[np.ndarray] = None,
 ):
-    """Histograms for 2D GaussianImage: 3 Cholesky, 3 cov, 3 conic, 2 scales, radii."""
+    """Histograms for 2D GaussianImage: 3 Cholesky, 3 cov, 3 conic, 2 scales, radii, feature_dc."""
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     chol_names = ["l11", "l21", "l22"]
     cov_names = ["Cxx", "Cxy", "Cyy"]
     conic_names = ["invCxx", "invCxy", "invCyy"]
     scale_names = ["scale_x", "scale_y"]
+    feature_dc_names = ["feature_dc_R", "feature_dc_G", "feature_dc_B"]
 
     def _hist(data, title, xlabel, fname, bins=80):
         fig, ax = plt.subplots(1, 1, figsize=(6, 4))
@@ -116,6 +119,20 @@ def plot_histograms_2d(
                 _hist(conic_elements[valid, i], f"Conic (2D Sigma^{{-1}}): {name}", name, f"{prefix}hist_conic_{name}.png")
     for i, name in enumerate(scale_names):
         _hist(scale_xy[:, i], f"Scale (2D sqrt diag): {name}", name, f"{prefix}hist_scale_{name}.png")
+
+    if feature_dc is not None:
+        for i, name in enumerate(feature_dc_names):
+            _hist(feature_dc[:, i], f"Feature DC: {name}", name, f"{prefix}hist_feature_dc_{name}.png")
+        fig, ax = plt.subplots(1, 1, figsize=(6, 4))
+        for i, name in enumerate(feature_dc_names):
+            ax.hist(feature_dc[:, i], bins=80, density=True, alpha=0.5, label=name, histtype="step", linewidth=1.5)
+        ax.set_title("Feature DC (RGB channels)")
+        ax.set_xlabel("Value")
+        ax.set_ylabel("Density")
+        ax.legend()
+        plt.tight_layout()
+        plt.savefig(out_dir / f"{prefix}hist_feature_dc_all.png", dpi=150)
+        plt.close()
 
     fig, ax = plt.subplots(1, 1, figsize=(6, 4))
     for i, name in enumerate(scale_names):
@@ -175,9 +192,13 @@ def main():
     out_dir = Path(args.out_dir)
 
     print(f"Loading checkpoint: {args.checkpoint}")
-    cholesky_elements, xyz_raw = load_checkpoint(args.checkpoint, device)
+    cholesky_elements, xyz_raw, feature_dc_t = load_checkpoint(args.checkpoint, device)
     N = cholesky_elements.shape[0]
     print(f"GaussianImage (2D), num_gaussians: {N}")
+
+    feature_dc_np = feature_dc_t.detach().cpu().numpy() if feature_dc_t is not None else None
+    if feature_dc_np is not None:
+        print(f"Feature DC shape: {feature_dc_np.shape}")
 
     cholesky_np = cholesky_elements.detach().cpu().numpy()
     cov_flat = cholesky_2d_to_covariance(cholesky_elements)
@@ -228,6 +249,12 @@ def main():
         r = radii_np[radii_np > 0]
         lines.append("")
         lines.append(f"Radii: min={radii_np.min()}, max={radii_np.max()}, mean(>0)={r.mean():.2f}")
+    if feature_dc_np is not None:
+        lines.append("")
+        lines.append("Feature DC (2D) [R, G, B]:")
+        for i, name in enumerate(["feature_dc_R", "feature_dc_G", "feature_dc_B"]):
+            col = feature_dc_np[:, i]
+            lines.append(f"  {name}: min={col.min():.4f}, max={col.max():.4f}, mean={col.mean():.4f}")
 
     for s in lines:
         print(s)
@@ -238,7 +265,7 @@ def main():
     print(f"\nSummary: {summary_path}")
 
     prefix = Path(args.checkpoint).stem + "_"
-    plot_histograms_2d(cholesky_np, cov_np, scale_np, radii_np, out_dir, prefix=prefix, conic_elements=conic_np)
+    plot_histograms_2d(cholesky_np, cov_np, scale_np, radii_np, out_dir, prefix=prefix, conic_elements=conic_np, feature_dc=feature_dc_np)
     print(f"Histograms: {out_dir}")
 
 
