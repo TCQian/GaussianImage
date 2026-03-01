@@ -86,9 +86,15 @@ class SimpleTrainer2d:
             print(f"loading model path:{model_path}")
             checkpoint = torch.load(model_path, map_location=self.device)
             model_dict = self.gaussian_model.state_dict()
-            pretrained_dict = {k: v for k, v in checkpoint.items() if k in model_dict}
-            model_dict.update(pretrained_dict)
-            self.gaussian_model.load_state_dict(model_dict)
+            if model_name == "GaussianImage_Cholesky" and _is_3d_checkpoint(checkpoint):
+                # Convert 3D attributes to 2D: first 2 from _xyz, _cholesky[0,1,3], _features_dc, opacity=1
+                state_2d = load_3d_checkpoint_as_2d(checkpoint, model_dict, self.device)
+                self.gaussian_model.load_state_dict(state_2d, strict=False)
+                print("Loaded 3D checkpoint as 2D (xyz[:2], cholesky[0,1,3], features_dc, opacity=1).")
+            else:
+                pretrained_dict = {k: v for k, v in checkpoint.items() if k in model_dict}
+                model_dict.update(pretrained_dict)
+                self.gaussian_model.load_state_dict(model_dict)
 
     def train(self):     
         psnr_list, iter_list = [], []
@@ -98,6 +104,11 @@ class SimpleTrainer2d:
         self.gaussian_model.train()
         start_time = time.time()
         for iter in range(1, self.iterations+1):
+            if iter == 1 or iter % 1000 == 0:
+                self.gaussian_model.debug_mode = True
+            else:
+                self.gaussian_model.debug_mode = False
+                
             loss, psnr = self.gaussian_model.train_iter(self.gt_image)
             
             if early_stopping(loss):
@@ -140,6 +151,67 @@ class SimpleTrainer2d:
             name = self.image_name + "_fitting.png" 
             img.save(str(self.log_dir / name))
         return psnr, ms_ssim_value
+
+def _is_3d_checkpoint(checkpoint):
+    """True if checkpoint has 3D attributes: _xyz (N,3), _cholesky, _features_dc, and optionally opacity."""
+    if "_xyz" not in checkpoint or "_cholesky" not in checkpoint or "_features_dc" not in checkpoint:
+        return False
+    xyz = checkpoint["_xyz"]
+    return xyz.dim() >= 2 and xyz.shape[1] >= 3
+
+
+def load_3d_checkpoint_as_2d(checkpoint, model_dict, device):
+    """
+    Convert a 3D checkpoint (_xyz [N,3], _cholesky, _features_dc, opacity) into 2D
+    attributes for GaussianImage_Cholesky: first 2 from _xyz, _cholesky[0,1,3],
+    _features_dc as-is, and all opacity set to 1 (not loaded from checkpoint).
+    """
+    state_2d = {}
+    n_ckpt = checkpoint["_xyz"].shape[0]
+    n_model = model_dict["_xyz"].shape[0]
+    n = min(n_ckpt, n_model)
+
+    # _xyz: first 2 from 3D; 2D model uses atanh space (get_xyz = tanh(_xyz))
+    xyz_3d = checkpoint["_xyz"].to(device).float()
+    if xyz_3d.shape[1] >= 3:
+        xy = xyz_3d[:n, :2].clone()
+        xy = torch.clamp(xy, -1.0 + 1e-6, 1.0 - 1e-6)
+        _xyz_2d = torch.atanh(xy)
+    else:
+        _xyz_2d = xyz_3d[:n].clone()
+    _xyz_param = torch.empty_like(model_dict["_xyz"], device=device)
+    _xyz_param[:n].copy_(_xyz_2d)
+    if n < n_model:
+        _xyz_param[n:].copy_(model_dict["_xyz"][n:].to(device))
+    state_2d["_xyz"] = _xyz_param
+
+    # _cholesky: take elements at indices 0, 1, 3 (2D block from 3D lower triangular)
+    cholesky_3d = checkpoint["_cholesky"].to(device).float()
+    if cholesky_3d.dim() == 2 and cholesky_3d.shape[1] >= 4:
+        cholesky_2d = cholesky_3d[:n, [0, 1, 3]].clone()
+    else:
+        cholesky_2d = cholesky_3d[:n, :3].clone() if cholesky_3d.dim() == 2 else cholesky_3d[:n].clone()
+    _cholesky_param = torch.empty_like(model_dict["_cholesky"], device=device)
+    _cholesky_param[:n].copy_(cholesky_2d)
+    if n < n_model:
+        _cholesky_param[n:].copy_(model_dict["_cholesky"][n:].to(device))
+    state_2d["_cholesky"] = _cholesky_param
+
+    # _features_dc: keep; 3D may be (N, 1, 3) -> squeeze to (N, 3)
+    fd = checkpoint["_features_dc"].to(device).float()
+    if fd.dim() == 3:
+        fd = fd.squeeze(1)
+    _features_param = torch.empty_like(model_dict["_features_dc"], device=device)
+    _features_param[:n].copy_(fd[:n])
+    if n < n_model:
+        _features_param[n:].copy_(model_dict["_features_dc"][n:].to(device))
+    state_2d["_features_dc"] = _features_param
+
+    # opacity: keep all as 1 (do not load from checkpoint)
+    state_2d["_opacity"] = torch.ones_like(model_dict["_opacity"], device=device)
+
+    return state_2d
+
 
 def image_path_to_tensor(image_path: Path):
     img = Image.open(image_path)

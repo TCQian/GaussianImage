@@ -22,9 +22,10 @@ QUANT_ITERATIONS=50000
 NUM_POINTS=750
 START_FRAME=0
 NUM_FRAMES=1
+MODEL_PATH=""   # Optional: path to checkpoint for train.py (e.g. 3D .pth.tar; will be converted to 2D if 3D)
 
 # Parse command-line arguments.
-# Usage: ./script.sh --data_name MyData --num_points 30000 --start_frame 40 --num_frames 15
+# Usage: ./script.sh --data_name MyData --num_points 30000 [--model_path /path/to/checkpoint.pth.tar]
 while [ "$#" -gt 0 ]; do
     case $1 in
         -d|--data_name)
@@ -43,9 +44,13 @@ while [ "$#" -gt 0 ]; do
             NUM_FRAMES="$2"
             shift 2
             ;;
+        -m|--model_path)
+            MODEL_PATH="$2"
+            shift 2
+            ;;
         *)
             echo "Unknown parameter: $1"
-            echo "Usage: $0 [--data_name <value>] [--num_points <value>] [--start_frame <value>] [--num_frames <value>]"
+            echo "Usage: $0 [--data_name <value>] [--num_points <value>] [--start_frame <value>] [--num_frames <value>] [--model_path <path>]"
             exit 1
             ;;
     esac
@@ -59,9 +64,10 @@ DATASET_PATH="/home/e/e0407638/github/GaussianVideo/dataset/${DATA_NAME}/"
 CHECKPOINT_PATH="/home/e/e0407638/github/GaussianImage/checkpoints/${DATA_NAME}/${MODEL_NAME}_${TRAIN_ITERATIONS}_${NUM_POINTS}/"
 CHECKPOINT_QUANT_PATH="/home/e/e0407638/github/GaussianImage/checkpoints_quant/${DATA_NAME}/${MODEL_NAME}_${QUANT_ITERATIONS}_${NUM_POINTS}/"
 
-python utils.py "${YUV_PATH}" --width 1920 --height 1080 --start_frame ${START_FRAME}
+# python utils.py "${YUV_PATH}" --width 1920 --height 1080 --start_frame ${START_FRAME}
 
 # Run the training script with the required arguments.
+# With --model_path: loads checkpoint (3D checkpoints auto-converted to 2D for GaussianImage_Cholesky).
 python train.py \
     --dataset "${DATASET_PATH}" \
     --data_name "${DATA_NAME}" \
@@ -70,30 +76,31 @@ python train.py \
     --num_points "${NUM_POINTS}" \
     --start_frame "${START_FRAME}" \
     --num_frames "${NUM_FRAMES}" \
-    --save_imgs
+    --save_imgs \
+    ${MODEL_PATH:+--model_path "${MODEL_PATH}"}
 
 # Run the quantization training script.
-python train_quantize.py \
-    --dataset "${DATASET_PATH}" \
-    --data_name "${DATA_NAME}" \
-    --iterations "${QUANT_ITERATIONS}" \
-    --model_name "${MODEL_NAME}" \
-    --num_points "${NUM_POINTS}" \
-    --model_path "${CHECKPOINT_PATH}" \
-    --start_frame "${START_FRAME}" \
-    --num_frames "${NUM_FRAMES}" \
-    --save_imgs
+# python train_quantize.py \
+#     --dataset "${DATASET_PATH}" \
+#     --data_name "${DATA_NAME}" \
+#     --iterations "${QUANT_ITERATIONS}" \
+#     --model_name "${MODEL_NAME}" \
+#     --num_points "${NUM_POINTS}" \
+#     --model_path "${CHECKPOINT_PATH}" \
+#     --start_frame "${START_FRAME}" \
+#     --num_frames "${NUM_FRAMES}" \
+#     --save_imgs
 
-# Run the quantization testing script.
-python test_quantize.py \
-    --dataset "${DATASET_PATH}" \
-    --data_name "${DATA_NAME}" \
-    --iterations "${QUANT_ITERATIONS}" \
-    --model_name "${MODEL_NAME}" \
-    --num_points "${NUM_POINTS}" \
-    --model_path "${CHECKPOINT_QUANT_PATH}" \
-    --start_frame "${START_FRAME}" \
-    --num_frames "${NUM_FRAMES}" \
-    --save_imgs
+# # Run the quantization testing script.
+# python test_quantize.py \
+#     --dataset "${DATASET_PATH}" \
+#     --data_name "${DATA_NAME}" \
+#     --iterations "${QUANT_ITERATIONS}" \
+#     --model_name "${MODEL_NAME}" \
+#     --num_points "${NUM_POINTS}" \
+#     --model_path "${CHECKPOINT_QUANT_PATH}" \
+#     --start_frame "${START_FRAME}" \
+#     --num_frames "${NUM_FRAMES}" \
+#     --save_imgs
 
 echo "Done"
